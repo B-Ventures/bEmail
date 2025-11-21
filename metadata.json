@@ -1,0 +1,5 @@
+{
+  "name": "bEmails",
+  "description": "An application that uses AI to analyze a mini-course PDF content, breaks it down into a series of emails, and generates beautifully designed HTML templates for an email campaign.",
+  "requestFramePermissions": []
+}
