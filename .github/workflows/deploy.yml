@@ -1,3 +1,4 @@
+
 name: Deploy to GitHub Pages
 
 on:
@@ -21,12 +22,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
-          # Removed 'cache: npm' to fix the "Dependencies lock file is not found" error
           
       - name: Install dependencies
         run: npm install
         
       - name: Build
+        env:
+          # Pass the secret to the build process
+          API_KEY: ${{ secrets.API_KEY }}
         run: npm run build
         
       - name: Upload artifact

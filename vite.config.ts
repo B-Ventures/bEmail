@@ -11,9 +11,13 @@ export default defineConfig({
     sourcemap: true,
     chunkSizeWarningLimit: 1600,
   },
-  // Define process.env to prevent "process is not defined" errors in the browser
-  // We use a safer empty object polyfill
+  // Define process.env variables safely for the browser
   define: {
-    'process.env': {} 
+    'process.env': {
+      // If the API_KEY is present at build time (e.g. GitHub Actions), inject it.
+      // Otherwise default to empty string to prevent "process.env.API_KEY is undefined" crashes
+      API_KEY: process.env.API_KEY || '',
+      NODE_ENV: process.env.NODE_ENV || 'development'
+    } 
   }
 });

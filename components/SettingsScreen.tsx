@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { SmtpConfig } from '../types';
+import { SmtpConfig, AIProvider } from '../types';
 import { seedDatabase, auth, updateUserProfile, subscribeToUserProfile } from '../services/firebase';
 
 interface SettingsScreenProps {
@@ -31,8 +31,28 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ config, onSave }) => {
   const [displayName, setDisplayName] = useState('');
   const [profileSaved, setProfileSaved] = useState(false);
 
+  // AI Settings State
+  const [aiProvider, setAiProvider] = useState<AIProvider>('gemini');
+  const [apiKey, setApiKey] = useState('');
+  const [envKeyExists, setEnvKeyExists] = useState(false);
+  const [apiKeySaved, setApiKeySaved] = useState(false);
+
   useEffect(() => {
       setFormData(prev => ({ ...prev, ...config }));
+      
+      // Load AI Provider preference
+      const storedProvider = localStorage.getItem('ai_provider') as AIProvider;
+      if (storedProvider) {
+          setAiProvider(storedProvider);
+          loadApiKey(storedProvider);
+      } else {
+          loadApiKey('gemini');
+      }
+      
+      // Check environment variable for Gemini
+      if (process.env.API_KEY && process.env.API_KEY.length > 0) {
+          setEnvKeyExists(true);
+      }
   }, [config]);
 
   // Subscribe to User Profile Data
@@ -45,6 +65,19 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ config, onSave }) => {
           return () => unsub();
       }
   }, []);
+
+  const loadApiKey = (provider: AIProvider) => {
+      const keyName = `${provider}_api_key`;
+      const storedKey = localStorage.getItem(keyName);
+      setApiKey(storedKey || '');
+  };
+
+  const handleProviderChange = (provider: AIProvider) => {
+      setAiProvider(provider);
+      localStorage.setItem('ai_provider', provider);
+      loadApiKey(provider);
+      setApiKeySaved(false);
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -67,6 +100,17 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ config, onSave }) => {
           setTimeout(() => setProfileSaved(false), 3000);
       }
   };
+  
+  const handleSaveApiKey = () => {
+      const keyName = `${aiProvider}_api_key`;
+      if (apiKey.trim()) {
+          localStorage.setItem(keyName, apiKey.trim());
+      } else {
+          localStorage.removeItem(keyName);
+      }
+      setApiKeySaved(true);
+      setTimeout(() => setApiKeySaved(false), 2000);
+  }
 
   const handleTestConnection = async () => {
       if (formData.method === 'simulation') {
@@ -126,6 +170,92 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ config, onSave }) => {
   return (
     <div className="w-full max-w-3xl mx-auto pb-12">
       
+      {/* AI Config */}
+      <div className="bg-brand-medium rounded-xl shadow-lg border border-brand-light p-8 mb-8">
+          <div className="flex items-center gap-3 mb-6">
+              <div className="h-10 w-10 rounded-lg bg-brand-red/20 text-brand-red flex items-center justify-center">
+                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-white">AI Configuration</h2>
+                <p className="text-xs text-brand-subtext">Select your preferred AI intelligence provider.</p>
+              </div>
+          </div>
+
+          {/* Provider Tabs */}
+          <div className="flex gap-2 mb-6 p-1 bg-brand-dark rounded-lg border border-brand-border overflow-x-auto">
+              {[
+                  { id: 'gemini', label: 'Google Gemini', icon: 'G' },
+                  { id: 'openai', label: 'OpenAI (GPT)', icon: 'O' },
+                  { id: 'deepseek', label: 'DeepSeek', icon: 'D' }
+              ].map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => handleProviderChange(p.id as AIProvider)}
+                    className={`flex-1 px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
+                        aiProvider === p.id 
+                        ? 'bg-brand-medium text-white shadow-md border border-brand-light' 
+                        : 'text-brand-subtext hover:text-white hover:bg-brand-medium/50'
+                    }`}
+                  >
+                     <span>{p.label}</span>
+                  </button>
+              ))}
+          </div>
+
+          <div className="bg-brand-dark p-6 rounded-lg border border-brand-border animate-fade-in">
+              <label className="block text-sm font-medium text-white mb-2">
+                  {aiProvider === 'gemini' && 'Google Gemini API Key'}
+                  {aiProvider === 'openai' && 'OpenAI API Key'}
+                  {aiProvider === 'deepseek' && 'DeepSeek API Key'}
+              </label>
+              <div className="flex gap-2">
+                  <input 
+                    type="password" 
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder={aiProvider === 'gemini' && envKeyExists ? "Using GitHub Secret (or paste to override)" : "sk-..."}
+                    className="flex-1 p-3 bg-brand-medium border border-brand-light rounded-md text-white focus:ring-2 focus:ring-brand-red outline-none font-mono text-sm"
+                  />
+                  <button 
+                    onClick={handleSaveApiKey}
+                    className="px-6 py-2 bg-brand-light hover:bg-brand-border text-white font-medium rounded-md transition-colors border border-brand-border"
+                  >
+                      {apiKeySaved ? 'Saved!' : 'Save Key'}
+                  </button>
+              </div>
+              
+              <div className="mt-3 flex flex-col gap-1">
+                  {aiProvider === 'gemini' && (
+                      <>
+                        {envKeyExists && (
+                            <span className="text-xs text-green-400 flex items-center gap-1">
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                                Key detected in Environment (GitHub Secrets)
+                            </span>
+                        )}
+                        <p className="text-xs text-brand-subtext">
+                            Fast, multimodal (accepts PDFs), and generous free tier. Get key: <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-brand-red underline">Google AI Studio</a>.
+                        </p>
+                      </>
+                  )}
+                  {aiProvider === 'openai' && (
+                      <p className="text-xs text-brand-subtext">
+                          Industry standard (GPT-4o). Supports text & DOCX (via text extraction). Get key: <a href="https://platform.openai.com/api-keys" target="_blank" className="text-brand-red underline">OpenAI Platform</a>.
+                      </p>
+                  )}
+                  {aiProvider === 'deepseek' && (
+                      <p className="text-xs text-brand-subtext">
+                          Very low cost, high performance. Supports text & DOCX. Get key: <a href="https://platform.deepseek.com/api_keys" target="_blank" className="text-brand-red underline">DeepSeek Platform</a>.
+                      </p>
+                  )}
+                  <p className="text-xs text-gray-500 italic mt-2">
+                      Note: Keys are stored securely in your browser's Local Storage and are never saved to our database.
+                  </p>
+              </div>
+          </div>
+      </div>
+
       {/* Account Info */}
       <div className="bg-brand-medium rounded-xl shadow-lg border border-brand-light p-8 mb-8">
           <h2 className="text-2xl font-bold text-white mb-4">Account Management</h2>

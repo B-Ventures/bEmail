@@ -104,6 +104,8 @@ export interface Campaign {
   }
 }
 
+export type AIProvider = 'gemini' | 'openai' | 'deepseek';
+
 export interface SmtpConfig {
   method: 'simulation' | 'webhook'; 
   webhookUrl: string; 

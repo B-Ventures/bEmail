@@ -1,18 +1,134 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { ParsedEmailData } from '../types';
+import { ParsedEmailData, AIProvider } from '../types';
 
-// Helper to initialize AI client lazily
-// This prevents the app from crashing on load if the API key is missing in the environment
-const getAiClient = () => {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-        throw new Error("API_KEY is missing. Please ensure it is set in your environment variables.");
+// --- CONFIGURATION HELPERS ---
+
+const getAIConfig = () => {
+    const provider = (localStorage.getItem('ai_provider') as AIProvider) || 'gemini';
+    let apiKey = localStorage.getItem(`${provider}_api_key`);
+
+    // Fallback for Gemini if using GitHub Secrets
+    if (provider === 'gemini' && !apiKey && process.env.API_KEY) {
+        apiKey = process.env.API_KEY;
     }
-    return new GoogleGenAI({ apiKey });
+
+    if (!apiKey) {
+        throw new Error(`MISSING_KEY_${provider.toUpperCase()}`);
+    }
+
+    return { provider, apiKey };
 };
 
-// --- Helpers for Document Processing ---
+// --- GENERIC AI COMPLETION HANDLER ---
+
+const callAI = async (
+    systemPrompt: string, 
+    userPrompt: string | any[], 
+    schema: any, 
+    isFilePdf: boolean
+): Promise<string> => {
+    
+    const { provider, apiKey } = getAIConfig();
+
+    // 1. GOOGLE GEMINI IMPLEMENTATION
+    if (provider === 'gemini') {
+        const ai = new GoogleGenAI({ apiKey });
+        
+        // Fallback check for dynamic key selection in AI Studio environments
+        if (!apiKey && (window as any).aistudio) {
+             // Project IDX specific logic handled in UI or via env, skipping complex polyfill here for simplicity
+        }
+
+        let contents: any = null;
+        if (Array.isArray(userPrompt)) {
+            // Has file attachments
+            contents = { parts: [...userPrompt, { text: systemPrompt }] }; 
+        } else {
+            contents = { parts: [{ text: systemPrompt + "\n" + userPrompt }] };
+        }
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: contents,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: schema, // Native Schema Object
+                temperature: 0.2,
+            }
+        });
+        
+        return response.text || "{}";
+    }
+
+    // 2. OPENAI & DEEPSEEK IMPLEMENTATION (Shared Fetch Logic)
+    if (provider === 'openai' || provider === 'deepseek') {
+        
+        if (isFilePdf) {
+             throw new Error("PDF_NOT_SUPPORTED");
+        }
+
+        // Prepare Endpoints
+        const baseUrl = provider === 'openai' 
+            ? 'https://api.openai.com/v1/chat/completions' 
+            : 'https://api.deepseek.com/chat/completions';
+        
+        const model = provider === 'openai' ? 'gpt-4o' : 'deepseek-chat';
+
+        // Flatten user prompt if array (extract text only, ignore images/pdf blobs for this fetch implementation)
+        let finalUserPrompt = "";
+        if (Array.isArray(userPrompt)) {
+            // Filter for text parts only
+            finalUserPrompt = userPrompt
+                .filter(p => p.text)
+                .map(p => p.text)
+                .join("\n\n");
+                
+            if (!finalUserPrompt && userPrompt.some(p => p.inlineData)) {
+                throw new Error("Only text/docx files are supported with OpenAI/DeepSeek in this version.");
+            }
+        } else {
+            finalUserPrompt = userPrompt;
+        }
+
+        // Construct Fetch
+        const response = await fetch(baseUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: [
+                    { 
+                        role: 'system', 
+                        content: systemPrompt + "\n IMPORTANT: Respond strictly with valid JSON." 
+                    },
+                    { 
+                        role: 'user', 
+                        content: finalUserPrompt 
+                    }
+                ],
+                response_format: { type: "json_object" }, // Ensure JSON mode
+                temperature: 0.2
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error?.message || response.statusText);
+        }
+
+        const data = await response.json();
+        return data.choices[0].message.content;
+    }
+
+    throw new Error("Unknown AI Provider");
+};
+
+
+// --- DOCUMENT PROCESSING ---
 
 const fileToGenerativePart = async (file: File): Promise<{inlineData: {data: string, mimeType: string}}> => {
     const base64EncodedDataPromise = new Promise<string>((resolve) => {
@@ -25,12 +141,12 @@ const fileToGenerativePart = async (file: File): Promise<{inlineData: {data: str
     };
 };
 
-// This function handles the intelligent parsing of files (PDF, DOCX, TXT) into a structured course outline
 export const processDocument = async (file: File): Promise<{ title: string; contentChunks: string[] }> => {
     let promptContent: any[] = [];
+    const isPdf = file.type === 'application/pdf';
 
     // 1. Prepare content based on file type
-    if (file.type === 'application/pdf') {
+    if (isPdf) {
          // Gemini can read PDFs directly via base64
          const part = await fileToGenerativePart(file);
          promptContent = [part];
@@ -39,7 +155,7 @@ export const processDocument = async (file: File): Promise<{ title: string; cont
         file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
         file.name.endsWith('.docx')
     ) {
-         // Use Mammoth.js (loaded via CDN in index.html) to extract text from DOCX
+         // Use Mammoth.js (loaded via CDN in index.html) to extract text
          if ((window as any).mammoth) {
             const arrayBuffer = await file.arrayBuffer();
             const result = await (window as any).mammoth.extractRawText({ arrayBuffer });
@@ -54,10 +170,10 @@ export const processDocument = async (file: File): Promise<{ title: string; cont
          promptContent = [{ text: text }];
     }
 
-    // 2. Ask Gemini to analyze and structure the content
-    const prompt = `
+    // 2. System Prompt
+    const systemPrompt = `
         You are an expert educational content structurer. 
-        Analyze the attached document. It contains content for a mini-course.
+        Analyze the attached document content. It contains content for a mini-course.
         
         Your goals:
         1. Identify the main Course Title.
@@ -66,7 +182,11 @@ export const processDocument = async (file: File): Promise<{ title: string; cont
         If the content is already separated (e.g., by "Day 1", "Day 2"), respect that structure.
         If the content is a continuous block of text, intelligently divide it into 3-7 logical "Days" or "Lessons" based on topic changes.
         
-        Return ONLY a valid JSON object.
+        Return ONLY a valid JSON object matching this structure:
+        {
+            "title": "Course Name",
+            "contentChunks": ["Day 1 content full text...", "Day 2 content full text..."]
+        }
     `;
 
     const responseSchema = {
@@ -83,36 +203,25 @@ export const processDocument = async (file: File): Promise<{ title: string; cont
     };
 
     try {
-        // Initialize client here
-        const ai = getAiClient();
-        
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: {
-                parts: [...promptContent, { text: prompt }]
-            },
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: responseSchema,
-                temperature: 0.2,
-            }
-        });
-
-        const text = response.text;
-        if(!text) throw new Error("No response from AI");
-        
-        return JSON.parse(text);
-    } catch (e) {
+        // Call Generic AI Handler
+        const jsonText = await callAI(systemPrompt, promptContent, responseSchema, isPdf);
+        return JSON.parse(jsonText);
+    } catch (e: any) {
         console.error("Error parsing document:", e);
-        throw new Error("Failed to analyze document structure. " + (e as Error).message);
+        if (e.message.includes("MISSING_KEY")) {
+             throw new Error("API Key missing. Please check your Settings.");
+        }
+        if (e.message === "PDF_NOT_SUPPORTED") {
+            throw new Error("PDF analysis is only available with Google Gemini. For OpenAI or DeepSeek, please convert your file to DOCX or Text.");
+        }
+        throw new Error("Failed to analyze document. " + (e as Error).message);
     }
 };
 
-// --- Existing Email Generation Logic ---
+// --- EMAIL GENERATION ---
 
 // This function builds the final HTML from a structured data object and a sophisticated template.
 const buildEmailFromTemplate = (data: ParsedEmailData, artworkUrl: string, courseTitle: string): string => {
-  // Helper to conditionally render a block if data exists
   const renderIf = (condition: any, content: string) => condition ? content : '';
   
   return `
@@ -185,23 +294,24 @@ const buildEmailFromTemplate = (data: ParsedEmailData, artworkUrl: string, cours
 
 export const generateStyledEmail = async (emailContent: string, day: number, courseTitle: string, artworkUrl: string): Promise<{ subject: string, htmlBody: string, parsedData: ParsedEmailData }> => {
     
-    const prompt = `
-    You are an expert content strategist and copywriter. Your task is to analyze the raw text for a single email from a mini-course and extract its content into a structured JSON format. You must identify and separate the distinct parts of the email message.
-
+    const systemPrompt = `
+    You are an expert content strategist. Analyze the raw text for a single email and extract its content into a structured JSON format.
+    
     **CRITICAL RULES:**
-    1.  Your output MUST be a single, valid JSON object.
-    2.  The JSON object must conform to the provided schema.
-    3.  For fields that require HTML ('introduction', 'mainContent', 'closing', 'ps'), you must format the text appropriately. Use standard HTML tags like <p>, <h2>, <ul>, <li>, <strong>, etc. Use inline CSS for basic styling where appropriate (e.g., margins for spacing). Headings (like <h2>) should use the 'Playfair Display' font. Paragraphs should use 'Inter'.
-    4.  **MANDATORY:** Convert all placeholders like "[First Name]", "[Name]", "{{contact.FIRSTNAME}}" or similar to the standard placeholder \`{{firstName}}\`. The output MUST use \`{{firstName}}\`.
-    5.  Identify any "Action Step" or key takeaway and structure it into the 'actionStep' object. If there is a call to action link or button, extract its text and a placeholder '#' link.
-    6.  The 'headerCourseName' should reflect the current day of the course (e.g., "Day ${day} of X" or "Welcome Email").
+    1. Output MUST be valid JSON matching the schema.
+    2. For fields that require HTML ('introduction', 'mainContent', 'closing', 'ps'), format text appropriately (e.g., <p>, <h2>, <ul>, <strong>).
+    3. MANDATORY: Convert placeholders like "[First Name]" to \`{{firstName}}\`.
+    4. Identify any "Action Step".
+    5. 'headerCourseName' should be "Day ${day} of [Course Title]".
 
+    Now, analyze the text provided by the user and populate the JSON.
+    `;
+
+    const userPrompt = `
     **RAW TEXT FOR THIS EMAIL:**
     ---
     ${emailContent}
     ---
-
-    Now, analyze the text and populate the following JSON structure. Be thorough and logical in how you break down the content.
     `;
 
     const responseSchema = {
@@ -209,54 +319,43 @@ export const generateStyledEmail = async (emailContent: string, day: number, cou
         properties: {
             subject: { type: Type.STRING, description: "The email's subject line." },
             headerBrand: { type: Type.STRING, description: "The name of the brand or the main course title." },
-            headerCourseName: { type: Type.STRING, description: "The sub-heading for the course, including the day number (e.g., '7-Day Course: Day 1')." },
-            headerTitle: { type: Type.STRING, description: "The main, compelling title for this specific email, to be displayed prominently in the header." },
-            headerSubtitle: { type: Type.STRING, description: "A brief, one-line subtitle that expands on the main title." },
-            greeting: { type: Type.STRING, description: "The opening greeting. MUST use '{{firstName}}' as the placeholder (e.g., 'Hi {{firstName}},')." },
-            introduction: { type: Type.STRING, description: "The opening paragraph(s) of the email body, formatted as an HTML string." },
-            mainContent: { type: Type.STRING, description: "The core content of the email, including any subheadings, lists, or detailed explanations, formatted as an HTML string." },
+            headerCourseName: { type: Type.STRING, description: "The sub-heading for the course (e.g., '7-Day Course: Day 1')." },
+            headerTitle: { type: Type.STRING, description: "The main title for this specific email." },
+            headerSubtitle: { type: Type.STRING, description: "A brief subtitle." },
+            greeting: { type: Type.STRING, description: "The opening greeting (e.g., 'Hi {{firstName}},')." },
+            introduction: { type: Type.STRING, description: "Opening paragraph(s) as HTML." },
+            mainContent: { type: Type.STRING, description: "Core content as HTML." },
             actionStep: {
                 type: Type.OBJECT,
-                description: "A clearly defined action step or key takeaway for the reader.",
+                description: "A clearly defined action step.",
                 properties: {
-                    heading: { type: Type.STRING, description: "The title for the action step box (e.g., 'Your Action Step for Today')." },
-                    text: { type: Type.STRING, description: "The instructional text within the action step box, formatted as an HTML string." },
-                    buttonText: { type: Type.STRING, description: "Optional text for a call-to-action button (e.g., 'Download Worksheet')." },
-                    buttonLink: { type: Type.STRING, description: "Optional URL for the button. Use '#' if not specified." }
+                    heading: { type: Type.STRING },
+                    text: { type: Type.STRING },
+                    buttonText: { type: Type.STRING },
+                    buttonLink: { type: Type.STRING }
                 },
                 required: ["heading", "text"]
             },
-            closing: { type: Type.STRING, description: "The closing paragraphs and sign-off, formatted as an HTML string." },
-            ps: { type: Type.STRING, description: "An optional postscript (P.S.) section, formatted as an HTML string." }
+            closing: { type: Type.STRING, description: "Closing paragraphs as HTML." },
+            ps: { type: Type.STRING, description: "Postscript (P.S.) as HTML." }
         },
         required: ["subject", "headerBrand", "headerCourseName", "headerTitle", "headerSubtitle", "greeting", "introduction", "mainContent", "actionStep", "closing"],
     };
 
     try {
-        // Initialize client here
-        const ai = getAiClient();
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: responseSchema,
-                temperature: 0.2,
-            },
-        });
-
-        const jsonText = response.text.trim();
+        const jsonText = await callAI(systemPrompt, userPrompt, responseSchema, false);
         const parsedData: ParsedEmailData = JSON.parse(jsonText);
-        
         const fullHtmlBody = buildEmailFromTemplate(parsedData, artworkUrl, courseTitle);
 
         return { subject: parsedData.subject, htmlBody: fullHtmlBody, parsedData };
-    } catch (e) {
-        console.error("Error calling or parsing Gemini response:", e);
-        if (e instanceof SyntaxError) {
-             throw new Error("Failed to generate email. The AI returned malformed data. Please try refining your PDF content.");
+    } catch (e: any) {
+        console.error("Error in email generation:", e);
+        if (e.message.includes("MISSING_KEY")) {
+             throw new Error("API Key missing. Please check your Settings.");
         }
-        throw new Error("An unexpected error occurred while generating the email from the AI response.");
+        if (e instanceof SyntaxError) {
+             throw new Error("Failed to generate email. The AI returned malformed data. Please try again.");
+        }
+        throw new Error("Generation Error: " + (e as Error).message);
     }
 };
