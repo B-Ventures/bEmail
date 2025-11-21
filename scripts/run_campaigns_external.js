@@ -13,17 +13,34 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 const serviceAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
 
 if (!serviceAccountRaw) {
-    console.error("CRITICAL ERROR: process.env.FIREBASE_SERVICE_ACCOUNT is missing.");
+    console.error("❌ CRITICAL ERROR: process.env.FIREBASE_SERVICE_ACCOUNT is missing.");
+    console.error("-> Go to GitHub Repo Settings -> Secrets -> Actions and add 'FIREBASE_SERVICE_ACCOUNT'.");
+    process.exit(1);
+}
+
+// Validate Secret Format
+const trimmedSecret = serviceAccountRaw.trim();
+
+if (!trimmedSecret.startsWith('{')) {
+    console.error("❌ CRITICAL ERROR: The FIREBASE_SERVICE_ACCOUNT secret is invalid.");
+    console.error(`-> It starts with the character: "${trimmedSecret.substring(0, 5)}..."`);
+    console.error("-> It MUST start with a curly brace '{'.");
+    
+    if (/^\d/.test(trimmedSecret)) {
+         console.error("⚠️  DIAGNOSIS: It looks like you pasted the FILENAME (e.g. '0123...json') instead of the FILE CONTENT.");
+    }
+    
+    console.error("-> ACTION REQUIRED: Open the JSON file on your computer, copy ALL text inside, and update the GitHub Secret.");
     process.exit(1);
 }
 
 try {
-    const serviceAccount = JSON.parse(serviceAccountRaw);
+    const serviceAccount = JSON.parse(trimmedSecret);
     admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
     });
 } catch (e) {
-    console.error("Error parsing FIREBASE_SERVICE_ACCOUNT JSON:", e.message);
+    console.error("❌ Error parsing FIREBASE_SERVICE_ACCOUNT JSON:", e.message);
     process.exit(1);
 }
 

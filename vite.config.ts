@@ -1,3 +1,4 @@
+
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -11,6 +12,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1600,
   },
   // Define process.env to prevent "process is not defined" errors in the browser
+  // We use a safer empty object polyfill
   define: {
     'process.env': {} 
   }

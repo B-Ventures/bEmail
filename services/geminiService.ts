@@ -2,11 +2,15 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ParsedEmailData } from '../types';
 
-if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable is not set.");
-}
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Helper to initialize AI client lazily
+// This prevents the app from crashing on load if the API key is missing in the environment
+const getAiClient = () => {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+        throw new Error("API_KEY is missing. Please ensure it is set in your environment variables.");
+    }
+    return new GoogleGenAI({ apiKey });
+};
 
 // --- Helpers for Document Processing ---
 
@@ -79,6 +83,9 @@ export const processDocument = async (file: File): Promise<{ title: string; cont
     };
 
     try {
+        // Initialize client here
+        const ai = getAiClient();
+        
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: {
@@ -226,6 +233,9 @@ export const generateStyledEmail = async (emailContent: string, day: number, cou
     };
 
     try {
+        // Initialize client here
+        const ai = getAiClient();
+
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
