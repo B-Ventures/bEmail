@@ -65,7 +65,7 @@ const Dashboard: React.FC<DashboardProps> = ({ audiences, campaigns, sequences, 
                     <h3 className="font-bold text-lg text-white mb-1">Database Locked</h3>
                     <p className="text-sm mb-2">The app cannot save data because your Firestore security rules are set to 'locked'.</p>
                     <ol className="list-decimal list-inside text-sm space-y-1 bg-black/20 p-3 rounded-lg">
-                        <li>Go to your <a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer" className="underline font-bold text-white">Firebase Console</a> -> Firestore Database.</li>
+                        <li>Go to your <a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer" className="underline font-bold text-white">Firebase Console</a> &rarr; Firestore Database.</li>
                         <li>Click the <strong>Rules</strong> tab (next to Data).</li>
                         <li>Change <code className="bg-black/40 px-1 rounded text-yellow-400">allow read, write: if false;</code> to <code className="bg-black/40 px-1 rounded text-green-400">allow read, write: if true;</code></li>
                         <li>Click <strong>Publish</strong>.</li>
