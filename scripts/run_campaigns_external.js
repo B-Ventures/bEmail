@@ -53,6 +53,12 @@ async function run() {
     let emailsSent = 0;
     
     try {
+        await syncPublicFormsAndMergeSubscriptions();
+    } catch (e) {
+        console.error("[Warn] Subscription merge failed:", e.message);
+    }
+
+    try {
         const campaignsRef = db.collection('campaigns');
         const campaignsSnapshot = await campaignsRef.get();
 
@@ -81,6 +87,53 @@ async function run() {
     } catch (error) {
         console.error("[Fatal Error]", error);
         process.exit(1);
+    }
+}
+
+
+// 2b. PUBLIC FORMS + PENDING SIGN-UPS
+// Mirrors each audience's name/description to `publicForms` (what the public subscribe page reads)
+// and moves pending public sign-ups from `subscriptions` into their audience.
+async function syncPublicFormsAndMergeSubscriptions() {
+    const audSnap = await db.collection('audiences').get();
+    const batch = db.batch();
+    audSnap.forEach(d => {
+        const a = d.data();
+        batch.set(db.collection('publicForms').doc(d.id), {
+            id: d.id, name: a.name || '', description: a.description || '', userId: a.userId || ''
+        });
+    });
+    await batch.commit();
+
+    const pendingSnap = await db.collection('subscriptions').get();
+    if (pendingSnap.empty) return;
+
+    const byAudience = {};
+    pendingSnap.forEach(d => {
+        const p = d.data();
+        (byAudience[p.audienceId] = byAudience[p.audienceId] || []).push({ ...p, _ref: d.ref });
+    });
+
+    for (const [audienceId, items] of Object.entries(byAudience)) {
+        const audRef = db.collection('audiences').doc(audienceId);
+        await db.runTransaction(async (tx) => {
+            const snap = await tx.get(audRef);
+            if (!snap.exists) { items.forEach(p => tx.delete(p._ref)); return; }
+            const audience = snap.data();
+            const subscribers = audience.subscribers || [];
+            const existing = new Set(subscribers.map(s => (s.email || '').trim().toLowerCase()));
+            let added = 0;
+            for (const p of items) {
+                if (!existing.has(p.email)) {
+                    existing.add(p.email);
+                    subscribers.push({ id: p.subscriberId, email: p.email, firstName: p.firstName || 'Friend', joinedAt: p.joinedAt, status: 'active' });
+                    added++;
+                }
+                tx.delete(p._ref);
+            }
+            if (added > 0) tx.update(audRef, { subscribers });
+            console.log(`Merged ${added} new subscriber(s) into audience ${audienceId}.`);
+        });
     }
 }
 

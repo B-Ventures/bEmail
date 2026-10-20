@@ -28,7 +28,11 @@ import {
     validateConnection,
     subscribeToAuthChanges,
     logoutUser,
-    ensureUserProfile
+    ensureUserProfile,
+    syncAllPublicForms,
+    subscribeToPendingSubscriptions,
+    deletePendingSubscription,
+    PendingSubscription
 } from './services/firebase';
 
 type AppState = 'welcome' | 'upload' | 'processing' | 'results' | 'error';
@@ -127,6 +131,50 @@ const App: React.FC = () => {
         };
     }, [user, currentView]);
 
+
+    // --- Public form mirror + pending subscription merge (owner side) ---
+    const [pendingSubs, setPendingSubs] = useState<PendingSubscription[]>([]);
+    const publicFormsSynced = React.useRef(false);
+    const mergingIds = React.useRef(new Set<string>());
+
+    useEffect(() => {
+        if (!user || currentView === 'public_subscribe') return;
+        return subscribeToPendingSubscriptions(user.uid, setPendingSubs);
+    }, [user, currentView]);
+
+    // Publish name/description of every audience to `publicForms` once per session
+    // (creates the mirror for lists made before this change).
+    useEffect(() => {
+        if (!user || publicFormsSynced.current || audiences.length === 0) return;
+        publicFormsSynced.current = true;
+        syncAllPublicForms(audiences);
+    }, [user, audiences]);
+
+    // Move pending public sign-ups into their audience, then delete the pending record.
+    useEffect(() => {
+        if (!user || pendingSubs.length === 0 || audiences.length === 0) return;
+        const byAudience = new Map<string, PendingSubscription[]>();
+        for (const p of pendingSubs) {
+            if (mergingIds.current.has(p.id)) continue;
+            if (!audiences.find(a => a.id === p.audienceId)) continue;
+            mergingIds.current.add(p.id);
+            byAudience.set(p.audienceId, [...(byAudience.get(p.audienceId) || []), p]);
+        }
+        byAudience.forEach(async (items, audienceId) => {
+            const audience = audiences.find(a => a.id === audienceId)!;
+            const existing = new Set(audience.subscribers.map(s => s.email.trim().toLowerCase()));
+            const additions: Subscriber[] = [];
+            for (const p of items) {
+                if (existing.has(p.email)) continue;
+                existing.add(p.email);
+                additions.push({ id: p.subscriberId, email: p.email, firstName: p.firstName || 'Friend', joinedAt: p.joinedAt, status: 'active' });
+            }
+            if (additions.length > 0) {
+                await saveDocument('audiences', { ...audience, subscribers: [...audience.subscribers, ...additions] });
+            }
+            for (const p of items) await deletePendingSubscription(p.id);
+        });
+    }, [user, pendingSubs, audiences]);
 
     // --- Generator Handlers ---
     const handleStartGeneration = () => {

@@ -53,7 +53,7 @@ const AudienceManager: React.FC<AudienceManagerProps> = ({ audiences, onAdd, onU
   }
 
   const getShareLink = (audienceId: string) => {
-      return `${window.location.origin}?action=subscribe&listId=${audienceId}`;
+      return `${window.location.origin}${window.location.pathname}?action=subscribe&listId=${audienceId}`;
   };
 
   const getEmbedCode = (audienceId: string) => {

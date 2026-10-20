@@ -13,6 +13,7 @@ import {
   updateDoc,
   getDocs
 } from 'firebase/firestore';
+import type { Subscriber } from '../types';
 import { 
   getAuth, 
   createUserWithEmailAndPassword, 
@@ -174,35 +175,92 @@ export const subscribeToCollection = (collectionName: string, userId: string, ca
   });
 };
 
-// Helper specifically for Public Pages (No User ID required)
-export const getPublicAudience = async (audienceId: string) => {
+// --- PUBLIC SUBSCRIPTION FORMS ---
+// Public visitors can only read the minimal form info in `publicForms/{audienceId}`
+// (name + description + owner id) and can only CREATE one record in `subscriptions`.
+// They can never read audiences or other subscribers (see firestore.rules).
+
+export interface PublicForm {
+    id: string;
+    name: string;
+    description: string;
+    userId: string;
+}
+
+export const getPublicAudience = async (audienceId: string): Promise<PublicForm | null> => {
     if (!db) throw new Error("DB not connected");
     try {
-        const docRef = doc(db, 'audiences', audienceId);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-            return docSnap.data();
-        } else {
-            return null;
-        }
+        const docSnap = await getDoc(doc(db, 'publicForms', audienceId));
+        return docSnap.exists() ? (docSnap.data() as PublicForm) : null;
     } catch (e) {
-        console.error("Error fetching public audience:", e);
+        console.error("Error fetching public form:", e);
         throw e;
     }
 };
 
-// Helper for Public Subscription (Updates a doc without requiring full auth ownership if rules permit, or uses logic)
-export const savePublicSubscriber = async (audienceId: string, updatedAudienceData: any) => {
+// Creates a pending subscription. The owner's app (or the server scheduler) merges it into the audience.
+export const savePublicSubscriber = async (form: PublicForm, subscriber: Subscriber) => {
     if (!db) throw new Error("DB not connected");
+    const subId = `${form.id}_${subscriber.id}`;
     try {
-        await updateDoc(doc(db, 'audiences', audienceId), updatedAudienceData);
+        await setDoc(doc(db, 'subscriptions', subId), {
+            id: subId,
+            audienceId: form.id,
+            ownerId: form.userId,
+            subscriberId: subscriber.id,
+            email: subscriber.email.trim().toLowerCase(),
+            firstName: subscriber.firstName.slice(0, 80),
+            joinedAt: subscriber.joinedAt,
+        });
     } catch (e) {
         console.error("Error saving subscriber:", e);
         throw e;
     }
 };
 
+// Keeps the public form doc in sync with an audience (owner only).
+const syncPublicForm = async (audience: any, uid: string) => {
+    if (!db || !audience?.id) return;
+    await setDoc(doc(db, 'publicForms', audience.id), {
+        id: audience.id,
+        name: audience.name || '',
+        description: audience.description || '',
+        userId: uid,
+    });
+};
+
+export const syncAllPublicForms = async (audiences: any[]) => {
+    const user = auth?.currentUser;
+    if (!db || !user) return;
+    for (const a of audiences) {
+        try { await syncPublicForm(a, user.uid); } catch (e) { console.error("Error syncing public form:", e); }
+    }
+};
+
+export interface PendingSubscription {
+    id: string;
+    audienceId: string;
+    ownerId: string;
+    subscriberId: string;
+    email: string;
+    firstName: string;
+    joinedAt: string;
+}
+
+export const subscribeToPendingSubscriptions = (userId: string, callback: (data: PendingSubscription[]) => void) => {
+    if (!db || !userId) return () => {};
+    const q = query(collection(db, 'subscriptions'), where('ownerId', '==', userId));
+    return onSnapshot(q, (snap) => {
+        const data: PendingSubscription[] = [];
+        snap.forEach((d) => data.push(d.data() as PendingSubscription));
+        callback(data);
+    }, (error) => console.error("Error subscribing to pending subscriptions:", error));
+};
+
+export const deletePendingSubscription = async (id: string) => {
+    if (!db) return;
+    try { await deleteDoc(doc(db, 'subscriptions', id)); } catch (e) { console.error("Error deleting pending subscription:", e); }
+};
 
 // Helper to clean undefined values which Firebase rejects
 const sanitizeData = (data: any) => {
@@ -231,6 +289,11 @@ export const saveDocument = async (collectionName: string, data: any) => {
         safeData.userId = user.uid;
 
         await setDoc(doc(db, collectionName, data.id), safeData);
+
+        // Audiences have a public, minimal mirror used by the subscribe form.
+        if (collectionName === 'audiences') {
+            await syncPublicForm(safeData, user.uid);
+        }
     } catch (e: any) {
         console.error(`Error saving to ${collectionName}:`, e);
         
@@ -250,6 +313,9 @@ export const deleteDocument = async (collectionName: string, id: string) => {
     if (!db) return;
     try {
         await deleteDoc(doc(db, collectionName, id));
+        if (collectionName === 'audiences') {
+            await deleteDoc(doc(db, 'publicForms', id));
+        }
     } catch (e) {
         console.error(`Error deleting from ${collectionName}:`, e);
     }

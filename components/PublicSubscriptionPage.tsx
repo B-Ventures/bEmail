@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { Audience, Subscriber } from '../types';
-import { getPublicAudience, savePublicSubscriber } from '../services/firebase';
+import { Subscriber } from '../types';
+import { getPublicAudience, savePublicSubscriber, PublicForm } from '../services/firebase';
 
 // No props needed now as it fetches its own data
 const PublicSubscriptionPage: React.FC = () => {
   const [listId, setListId] = useState<string | null>(null);
-  const [audience, setAudience] = useState<Audience | null>(null);
+  const [audience, setAudience] = useState<PublicForm | null>(null);
   
   const [firstName, setFirstName] = useState('');
   const [email, setEmail] = useState('');
@@ -28,7 +28,7 @@ const PublicSubscriptionPage: React.FC = () => {
       try {
           const data = await getPublicAudience(id);
           if (data) {
-              setAudience(data as Audience);
+              setAudience(data);
               document.title = `${data.name} | Subscribe`;
               setStatus('idle');
           } else {
@@ -52,13 +52,8 @@ const PublicSubscriptionPage: React.FC = () => {
         status: 'active'
     };
 
-    const updatedAudience = {
-        ...audience,
-        subscribers: [...audience.subscribers, newSubscriber]
-    };
-
     try {
-        await savePublicSubscriber(audience.id, updatedAudience);
+        await savePublicSubscriber(audience, newSubscriber);
         setStatus('success');
     } catch (e) {
         console.error(e);

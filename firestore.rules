@@ -1,0 +1,79 @@
+rules_version = '2';
+
+// bEmail Firestore security rules
+// Paste into Firebase Console → Firestore Database → Rules → Publish.
+//
+// - Every private document (audiences, sequences, campaigns, assets) is readable/writable
+//   ONLY by the logged-in owner (field `userId`).
+// - `publicForms/{audienceId}` holds only name + description + owner id, so the public
+//   subscribe page can show the form without exposing subscriber data.
+// - `subscriptions/{id}` accepts CREATE-ONLY sign-ups from anyone (validated). Visitors can't
+//   read, edit or delete them. The owner's app / the server scheduler merges them into the audience.
+// - The GitHub Actions scheduler uses the Admin SDK and is not affected by these rules.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function ownsExisting() { return signedIn() && resource.data.userId == request.auth.uid; }
+    function ownsIncoming() { return signedIn() && request.resource.data.userId == request.auth.uid; }
+
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /settings/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /audiences/{id} {
+      allow read, delete: if ownsExisting();
+      allow create: if ownsIncoming();
+      allow update: if ownsExisting() && ownsIncoming();
+    }
+
+    match /sequences/{id} {
+      allow read, delete: if ownsExisting();
+      allow create: if ownsIncoming();
+      allow update: if ownsExisting() && ownsIncoming();
+    }
+
+    match /campaigns/{id} {
+      allow read, delete: if ownsExisting();
+      allow create: if ownsIncoming();
+      allow update: if ownsExisting() && ownsIncoming();
+    }
+
+    match /assets/{id} {
+      allow read, delete: if ownsExisting();
+      allow create: if ownsIncoming();
+      allow update: if ownsExisting() && ownsIncoming();
+    }
+
+    match /publicForms/{id} {
+      allow read: if true;
+      allow create: if ownsIncoming()
+        && exists(/databases/$(database)/documents/audiences/$(id))
+        && get(/databases/$(database)/documents/audiences/$(id)).data.userId == request.auth.uid;
+      allow update: if ownsExisting() && ownsIncoming();
+      allow delete: if ownsExisting();
+    }
+
+    match /subscriptions/{id} {
+      allow create: if
+        request.resource.data.keys().hasOnly(['id', 'audienceId', 'ownerId', 'subscriberId', 'email', 'firstName', 'joinedAt'])
+        && request.resource.data.id == id
+        && request.resource.data.audienceId is string
+        && request.resource.data.ownerId is string
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 200
+        && request.resource.data.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+        && request.resource.data.firstName is string
+        && request.resource.data.firstName.size() <= 80
+        && exists(/databases/$(database)/documents/publicForms/$(request.resource.data.audienceId))
+        && get(/databases/$(database)/documents/publicForms/$(request.resource.data.audienceId)).data.userId == request.resource.data.ownerId;
+      allow read, delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+      // no public reads, no updates
+    }
+  }
+}
