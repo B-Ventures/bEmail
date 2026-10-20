@@ -1,5 +1,6 @@
 
 import { Campaign, Audience, Sequence, Asset, SmtpConfig } from '../types';
+import { buildUnsubscribeUrl } from './unsubscribe';
 
 // Helper to resolve content from a sequence step
 export const resolveStepContent = (step: any, assets: Asset[]): string => {
@@ -97,7 +98,9 @@ export const processCampaignSequence = async (
             const content = resolveStepContent(step, assets);
             
             // Personalized Content Replacement
+            const unsubscribeUrl = await buildUnsubscribeUrl(audience.id, sub.id, sub.email, `${window.location.origin}${window.location.pathname}`);
             const personalizedContent = content
+                .replace(/{{unsubscribeUrl}}/gi, unsubscribeUrl)
                 .replace(/{{firstName}}/gi, sub.firstName || 'Friend')
                 .replace(/{{firstname}}/gi, sub.firstName || 'Friend')
                 .replace(/{{contact\.FIRSTNAME}}/gi, sub.firstName || 'Friend')
@@ -120,6 +123,7 @@ export const processCampaignSequence = async (
                             firstName: sub.firstName,
                             subject: step.subject,
                             html: personalizedContent,
+                            unsubscribeUrl,
                             campaign: campaign.name,
                             sequence: sequence.name
                         })

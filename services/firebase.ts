@@ -218,6 +218,44 @@ export const savePublicSubscriber = async (form: PublicForm, subscriber: Subscri
     }
 };
 
+// Public unsubscribe request (create-only). Applied by the owner app / scheduler after token check.
+export const saveUnsubscribeRequest = async (form: PublicForm, subscriberId: string, token: string) => {
+    if (!db) throw new Error("DB not connected");
+    const id = `${form.id}_${subscriberId}`;
+    await setDoc(doc(db, 'unsubscribes', id), {
+        id,
+        audienceId: form.id,
+        ownerId: form.userId,
+        subscriberId,
+        token,
+        createdAt: new Date().toISOString(),
+    });
+};
+
+export interface UnsubscribeRequest {
+    id: string;
+    audienceId: string;
+    ownerId: string;
+    subscriberId: string;
+    token: string;
+    createdAt: string;
+}
+
+export const subscribeToUnsubscribeRequests = (userId: string, callback: (data: UnsubscribeRequest[]) => void) => {
+    if (!db || !userId) return () => {};
+    const q = query(collection(db, 'unsubscribes'), where('ownerId', '==', userId));
+    return onSnapshot(q, (snap) => {
+        const data: UnsubscribeRequest[] = [];
+        snap.forEach((d) => data.push(d.data() as UnsubscribeRequest));
+        callback(data);
+    }, (error) => console.error("Error subscribing to unsubscribe requests:", error));
+};
+
+export const deleteUnsubscribeRequest = async (id: string) => {
+    if (!db) return;
+    try { await deleteDoc(doc(db, 'unsubscribes', id)); } catch (e) { console.error("Error deleting unsubscribe request:", e); }
+};
+
 // Keeps the public form doc in sync with an audience (owner only).
 const syncPublicForm = async (audience: any, uid: string) => {
     if (!db || !audience?.id) return;

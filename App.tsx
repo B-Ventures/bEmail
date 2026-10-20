@@ -15,6 +15,8 @@ import AudienceManager from './components/AudienceManager';
 import SettingsScreen from './components/SettingsScreen';
 import AssetLibrary from './components/AssetLibrary';
 import PublicSubscriptionPage from './components/PublicSubscriptionPage';
+import UnsubscribePage from './components/UnsubscribePage';
+import { unsubscribeToken } from './services/unsubscribe';
 import CampaignScheduler from './components/CampaignScheduler'; // Restored
 import { Email, EmailTask, Campaign, Audience, SmtpConfig, Sequence, Asset, Subscriber } from './types';
 import { generateStyledEmail, processDocument } from './services/geminiService';
@@ -32,11 +34,14 @@ import {
     syncAllPublicForms,
     subscribeToPendingSubscriptions,
     deletePendingSubscription,
-    PendingSubscription
+    PendingSubscription,
+    subscribeToUnsubscribeRequests,
+    deleteUnsubscribeRequest,
+    UnsubscribeRequest
 } from './services/firebase';
 
 type AppState = 'welcome' | 'upload' | 'processing' | 'results' | 'error';
-type View = 'dashboard' | 'generator' | 'assets' | 'sequences' | 'campaigns' | 'audiences' | 'settings' | 'public_subscribe';
+type View = 'dashboard' | 'generator' | 'assets' | 'sequences' | 'campaigns' | 'audiences' | 'settings' | 'public_subscribe' | 'public_unsubscribe';
 type DbStatus = 'loading' | 'ok' | 'permission-denied' | 'error' | 'disconnected';
 
 const App: React.FC = () => {
@@ -78,6 +83,11 @@ const App: React.FC = () => {
             setAuthLoading(false); // Skip auth loading for public page
             return;
         }
+        if (params.get('action') === 'unsubscribe' && params.get('listId')) {
+            setCurrentView('public_unsubscribe');
+            setAuthLoading(false);
+            return;
+        }
 
         // 2. Auth Listener
         const unsubscribe = subscribeToAuthChanges(async (currentUser) => {
@@ -94,7 +104,7 @@ const App: React.FC = () => {
     // --- Firebase Subscriptions (User Scoped) ---
     useEffect(() => {
         // Only subscribe if we have a logged-in user and NOT in public mode
-        if (!user || currentView === 'public_subscribe') {
+        if (!user || currentView === 'public_subscribe' || currentView === 'public_unsubscribe') {
             setDbStatus('disconnected');
             return; 
         }
@@ -138,7 +148,7 @@ const App: React.FC = () => {
     const mergingIds = React.useRef(new Set<string>());
 
     useEffect(() => {
-        if (!user || currentView === 'public_subscribe') return;
+        if (!user || currentView === 'public_subscribe' || currentView === 'public_unsubscribe') return;
         return subscribeToPendingSubscriptions(user.uid, setPendingSubs);
     }, [user, currentView]);
 
@@ -175,6 +185,34 @@ const App: React.FC = () => {
             for (const p of items) await deletePendingSubscription(p.id);
         });
     }, [user, pendingSubs, audiences]);
+
+    // Apply public unsubscribe requests (only if the token matches the subscriber's email).
+    const [unsubReqs, setUnsubReqs] = useState<UnsubscribeRequest[]>([]);
+    const applyingUnsubs = React.useRef(new Set<string>());
+    useEffect(() => {
+        if (!user || currentView === 'public_subscribe' || currentView === 'public_unsubscribe') return;
+        return subscribeToUnsubscribeRequests(user.uid, setUnsubReqs);
+    }, [user, currentView]);
+    useEffect(() => {
+        if (!user || unsubReqs.length === 0 || audiences.length === 0) return;
+        (async () => {
+            const changed = new Map<string, Audience>();
+            const handled: string[] = [];
+            for (const r of unsubReqs) {
+                if (applyingUnsubs.current.has(r.id)) continue;
+                const base = changed.get(r.audienceId) || audiences.find(a => a.id === r.audienceId);
+                if (!base) continue;
+                applyingUnsubs.current.add(r.id);
+                handled.push(r.id);
+                const sub = base.subscribers.find(s => s.id === r.subscriberId);
+                if (!sub || sub.status === 'unsubscribed') continue;
+                if ((await unsubscribeToken(base.id, sub.email)) !== r.token) continue; // forged/invalid
+                changed.set(base.id, { ...base, subscribers: base.subscribers.map(s => s.id === sub.id ? { ...s, status: 'unsubscribed' as const } : s) });
+            }
+            for (const a of changed.values()) await saveDocument('audiences', a);
+            for (const id of handled) await deleteUnsubscribeRequest(id);
+        })();
+    }, [user, unsubReqs, audiences]);
 
     // --- Generator Handlers ---
     const handleStartGeneration = () => {
@@ -294,6 +332,9 @@ const App: React.FC = () => {
     }
 
     // 1. Public View (No Auth Required)
+    if (currentView === 'public_unsubscribe') {
+        return <UnsubscribePage />;
+    }
     if (currentView === 'public_subscribe') {
         return <PublicSubscriptionPage />;
     }

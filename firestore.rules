@@ -9,6 +9,7 @@ rules_version = '2';
 //   subscribe page can show the form without exposing subscriber data.
 // - `subscriptions/{id}` accepts CREATE-ONLY sign-ups from anyone (validated). Visitors can't
 //   read, edit or delete them. The owner's app / the server scheduler merges them into the audience.
+// - `unsubscribes/{id}` accepts CREATE-ONLY one-click unsubscribe requests (token-checked on apply).
 // - The GitHub Actions scheduler uses the Admin SDK and is not affected by these rules.
 
 service cloud.firestore {
@@ -74,6 +75,22 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/publicForms/$(request.resource.data.audienceId)).data.userId == request.resource.data.ownerId;
       allow read, delete: if signedIn() && resource.data.ownerId == request.auth.uid;
       // no public reads, no updates
+    }
+
+    // One-click unsubscribe requests: create-only, validated. The owner app / scheduler applies
+    // them only if `token` matches the subscriber's email (so guessed ids do nothing).
+    match /unsubscribes/{id} {
+      allow create: if
+        request.resource.data.keys().hasOnly(['id', 'audienceId', 'ownerId', 'subscriberId', 'token', 'createdAt'])
+        && request.resource.data.id == id
+        && request.resource.data.audienceId is string
+        && request.resource.data.subscriberId is string
+        && request.resource.data.subscriberId.size() <= 64
+        && request.resource.data.token is string
+        && request.resource.data.token.matches('^[a-f0-9]{16}$')
+        && exists(/databases/$(database)/documents/publicForms/$(request.resource.data.audienceId))
+        && get(/databases/$(database)/documents/publicForms/$(request.resource.data.audienceId)).data.userId == request.resource.data.ownerId;
+      allow read, delete: if signedIn() && resource.data.ownerId == request.auth.uid;
     }
   }
 }

@@ -20,6 +20,16 @@ const AudienceManager: React.FC<AudienceManagerProps> = ({ audiences, onAdd, onU
   const [newSubName, setNewSubName] = useState('');
   const [showEmbedModal, setShowEmbedModal] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+
+  const startEdit = (a: Audience) => { setEditingId(a.id); setEditName(a.name); setEditDesc(a.description || ''); };
+  const saveEdit = (a: Audience) => {
+      if (!editName.trim()) return;
+      onUpdate({ ...a, name: editName.trim(), description: editDesc.trim() });
+      setEditingId(null);
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,13 +126,25 @@ const AudienceManager: React.FC<AudienceManagerProps> = ({ audiences, onAdd, onU
             {audiences.map(audience => (
                 <div key={audience.id} className="bg-brand-medium border border-brand-border rounded-2xl overflow-hidden shadow-xl">
                     <div className="p-6 bg-gradient-to-r from-brand-medium to-brand-dark border-b border-brand-border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        {editingId === audience.id ? (
+                            <div className="flex-1 w-full space-y-2">
+                                <input className="w-full p-2 bg-brand-dark border border-brand-border rounded-lg text-white focus:border-brand-red outline-none" value={editName} onChange={e => setEditName(e.target.value)} placeholder="List name (shown on the public form)" />
+                                <input className="w-full p-2 bg-brand-dark border border-brand-border rounded-lg text-white text-sm focus:border-brand-red outline-none" value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Description (shown on the public form)" />
+                                <div className="flex gap-2">
+                                    <button onClick={() => saveEdit(audience)} className="px-4 py-1.5 bg-brand-red text-white rounded-lg text-sm font-bold">Save</button>
+                                    <button onClick={() => setEditingId(null)} className="px-4 py-1.5 text-brand-subtext hover:text-white text-sm">Cancel</button>
+                                </div>
+                            </div>
+                        ) : (
                         <div>
                             <h3 className="text-xl font-bold text-white flex items-center gap-3">
                                 {audience.name}
-                                <span className="bg-brand-dark px-3 py-1 rounded-full text-xs font-medium text-brand-subtext border border-brand-border">{audience.subscribers.length} Subscribers</span>
+                                <span className="bg-brand-dark px-3 py-1 rounded-full text-xs font-medium text-brand-subtext border border-brand-border">{audience.subscribers.filter(s => s.status !== 'unsubscribed').length} Subscribers</span>
+                                <button onClick={() => startEdit(audience)} title="Edit name & description" className="text-xs font-medium text-brand-subtext hover:text-white border border-brand-border rounded-full px-3 py-1">Edit</button>
                             </h3>
                             <p className="text-sm text-brand-subtext mt-1">{audience.description}</p>
                         </div>
+                        )}
                         <button onClick={() => onDelete(audience.id)} className="text-brand-subtext hover:text-red-500 transition-colors p-2 rounded-lg hover:bg-red-500/10">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
                         </button>
@@ -186,7 +208,7 @@ const AudienceManager: React.FC<AudienceManagerProps> = ({ audiences, onAdd, onU
                                              <div key={sub.id} className="grid grid-cols-3 gap-4 p-4 border-b border-brand-border hover:bg-brand-dark transition-colors text-sm text-brand-text items-center">
                                                  <div className="font-medium text-white">{sub.firstName}</div>
                                                  <div className="truncate">{sub.email}</div>
-                                                 <div className="text-brand-subtext">{new Date(sub.joinedAt).toLocaleDateString()}</div>
+                                                 <div className="text-brand-subtext">{sub.status === 'unsubscribed' ? <span className="text-red-400">Unsubscribed</span> : new Date(sub.joinedAt).toLocaleDateString()}</div>
                                              </div>
                                          ))
                                      )}

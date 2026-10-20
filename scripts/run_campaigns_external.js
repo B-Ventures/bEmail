@@ -8,6 +8,11 @@
 import admin from 'firebase-admin';
 import axios from 'axios';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { createHash } from 'crypto';
+
+const APP_URL = process.env.APP_URL || 'https://b-ventures.github.io/bEmail/';
+const unsubscribeToken = (audienceId, email) => createHash('sha256').update(`${audienceId}:${String(email).trim().toLowerCase()}`).digest('hex').slice(0, 16);
+const unsubscribeUrl = (audienceId, sub) => `${APP_URL}?action=unsubscribe&listId=${encodeURIComponent(audienceId)}&sid=${encodeURIComponent(sub.id)}&t=${unsubscribeToken(audienceId, sub.email)}`;
 
 // 1. INITIALIZE FIREBASE (Securely using Environment Variable)
 const serviceAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -54,6 +59,7 @@ async function run() {
     
     try {
         await syncPublicFormsAndMergeSubscriptions();
+        await applyUnsubscribes();
     } catch (e) {
         console.error("[Warn] Subscription merge failed:", e.message);
     }
@@ -137,6 +143,33 @@ async function syncPublicFormsAndMergeSubscriptions() {
     }
 }
 
+// Apply public unsubscribe requests (token must match the subscriber's email).
+async function applyUnsubscribes() {
+    const snap = await db.collection('unsubscribes').get();
+    if (snap.empty) return;
+    const byAudience = {};
+    snap.forEach(d => { const r = d.data(); (byAudience[r.audienceId] = byAudience[r.audienceId] || []).push({ ...r, _ref: d.ref }); });
+    for (const [audienceId, items] of Object.entries(byAudience)) {
+        const audRef = db.collection('audiences').doc(audienceId);
+        await db.runTransaction(async (tx) => {
+            const a = await tx.get(audRef);
+            if (!a.exists) { items.forEach(r => tx.delete(r._ref)); return; }
+            const subscribers = a.data().subscribers || [];
+            let changed = 0;
+            for (const r of items) {
+                const sub = subscribers.find(s => s.id === r.subscriberId);
+                if (sub && sub.status !== 'unsubscribed' && unsubscribeToken(audienceId, sub.email) === r.token) {
+                    sub.status = 'unsubscribed';
+                    changed++;
+                }
+                tx.delete(r._ref);
+            }
+            if (changed > 0) tx.update(audRef, { subscribers });
+            console.log(`Applied ${changed} unsubscribe(s) on audience ${audienceId}.`);
+        });
+    }
+}
+
 // 3. CAMPAIGN PROCESSING LOGIC
 async function processSingleCampaign(campaign) {
     let sentCount = 0;
@@ -186,7 +219,8 @@ async function processSingleCampaign(campaign) {
 
             if (diffHours >= delayHours) {
                 const rawContent = resolveContent(step, assets);
-                const personalizedHtml = personalize(rawContent, sub);
+                const unsubUrl = unsubscribeUrl(audience.id || campaign.audienceId, sub);
+                const personalizedHtml = personalize(rawContent, sub).replace(/{{unsubscribeUrl}}/gi, unsubUrl);
 
                 try {
                     const headers = { 'Content-Type': 'application/json' };
@@ -197,6 +231,7 @@ async function processSingleCampaign(campaign) {
                         firstName: sub.firstName,
                         subject: step.subject,
                         html: personalizedHtml,
+                        unsubscribeUrl: unsubUrl,
                         campaign: campaign.name,
                         sequence: sequence.name,
                         stepIndex: currentStepIdx + 1
