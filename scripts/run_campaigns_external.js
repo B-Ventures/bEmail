@@ -7,7 +7,7 @@
 
 import admin from 'firebase-admin';
 import axios from 'axios';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, FieldPath } from 'firebase-admin/firestore';
 import { createHash } from 'crypto';
 
 const APP_URL = process.env.APP_URL || 'https://b-ventures.github.io/bEmail/';
@@ -218,6 +218,14 @@ async function processSingleCampaign(campaign) {
             const diffHours = diffMs / (1000 * 60 * 60);
 
             if (diffHours >= delayHours) {
+                // Claim this exact step first (transaction on the live campaign doc). If another sender
+                // (the browser app or an overlapping run) already moved this subscriber past it, skip.
+                const claimed = await claimStep(campaign.id, subId, currentStepIdx, now.toISOString(), sequence.steps.length);
+                if (!claimed) {
+                    console.log(`  -> Skip ${sub.email} step ${currentStepIdx + 1}: already claimed by another sender.`);
+                    continue;
+                }
+
                 const rawContent = resolveContent(step, assets);
                 const unsubUrl = unsubscribeUrl(audience.id || campaign.audienceId, sub);
                 const personalizedHtml = personalize(rawContent, sub).replace(/{{unsubscribeUrl}}/gi, unsubUrl);
@@ -238,39 +246,30 @@ async function processSingleCampaign(campaign) {
                     }, { headers });
 
                     sentCount++;
-                    stepIndexMap[subId] = currentStepIdx + 1;
-                    lastActionMap[subId] = now.toISOString();
-
-                    if (stepIndexMap[subId] >= sequence.steps.length) {
-                        newCompleted++;
-                    }
                 } catch (err) {
                     console.error(`  -> Error sending to ${sub.email}: ${err.message}`);
+                    // Release the claim so the next run retries this step.
+                    await releaseStep(campaign.id, subId, currentStepIdx, lastActionMap[subId] || null, sequence.steps.length);
                 }
             }
         }
 
-        if (sentCount > 0 || campaign.status === 'scheduled') {
-            const updatePayload = {
-                'stats.sent': FieldValue.increment(sentCount),
-                'progress.completedSubscribers': FieldValue.increment(newCompleted),
-                'progress.currentStepIndex': stepIndexMap,
-                'progress.lastActionAt': lastActionMap
-            };
-
+        // Progress/stats are written per send inside claimStep(); here only status changes remain.
+        if (campaign.status === 'scheduled' || campaign.runType === 'broadcast') {
+            const updatePayload = {};
             if (campaign.status === 'scheduled') {
                 updatePayload.status = 'active';
                 updatePayload.scheduledFor = FieldValue.delete();
             }
-
             if (campaign.runType === 'broadcast') {
-                const allDone = audience.subscribers.every(s => 
-                    s.status === 'unsubscribed' || (stepIndexMap[s.id] || 0) >= sequence.steps.length
+                const fresh = (await db.collection('campaigns').doc(campaign.id).get()).data() || {};
+                const idx = (fresh.progress && fresh.progress.currentStepIndex) || {};
+                const allDone = audience.subscribers.every(s =>
+                    s.status === 'unsubscribed' || (idx[s.id] || 0) >= sequence.steps.length
                 );
                 if (allDone) updatePayload.status = 'completed';
             }
-
-            await db.collection('campaigns').doc(campaign.id).update(updatePayload);
+            if (Object.keys(updatePayload).length) await db.collection('campaigns').doc(campaign.id).update(updatePayload);
         }
 
         return sentCount;
@@ -278,6 +277,51 @@ async function processSingleCampaign(campaign) {
     } catch (err) {
         console.error(`Error processing campaign ${campaign.id}:`, err);
         return 0;
+    }
+}
+
+// Atomically move one subscriber from step `idx` to `idx + 1`. Returns false if the live
+// document no longer has them at `idx` (someone else already sent it).
+async function claimStep(campaignId, subId, idx, nowIso, totalSteps) {
+    const ref = db.collection('campaigns').doc(campaignId);
+    return db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) return false;
+        const c = snap.data();
+        if (c.status === 'paused') return false;
+        const live = (c.progress && c.progress.currentStepIndex && c.progress.currentStepIndex[subId]) || 0;
+        if (live !== idx) return false;
+        const args = [
+            new FieldPath('progress', 'currentStepIndex', subId), idx + 1,
+            new FieldPath('progress', 'lastActionAt', subId), nowIso,
+            new FieldPath('stats', 'sent'), FieldValue.increment(1)
+        ];
+        if (idx + 1 >= totalSteps) args.push(new FieldPath('progress', 'completedSubscribers'), FieldValue.increment(1));
+        tx.update(ref, ...args);
+        return true;
+    });
+}
+
+// Undo a claim after a failed webhook call (only if nobody moved the subscriber since).
+async function releaseStep(campaignId, subId, idx, prevLastAction, totalSteps) {
+    const ref = db.collection('campaigns').doc(campaignId);
+    try {
+        await db.runTransaction(async (tx) => {
+            const snap = await tx.get(ref);
+            if (!snap.exists) return;
+            const c = snap.data();
+            const live = (c.progress && c.progress.currentStepIndex && c.progress.currentStepIndex[subId]) || 0;
+            if (live !== idx + 1) return;
+            const args = [
+                new FieldPath('progress', 'currentStepIndex', subId), idx,
+                new FieldPath('progress', 'lastActionAt', subId), prevLastAction === null ? FieldValue.delete() : prevLastAction,
+                new FieldPath('stats', 'sent'), FieldValue.increment(-1)
+            ];
+            if (idx + 1 >= totalSteps) args.push(new FieldPath('progress', 'completedSubscribers'), FieldValue.increment(-1));
+            tx.update(ref, ...args);
+        });
+    } catch (e) {
+        console.error(`  -> Could not release claim for ${subId}: ${e.message}`);
     }
 }
 
