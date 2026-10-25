@@ -11,7 +11,11 @@ import {
   where,
   getDoc,
   updateDoc,
-  getDocs
+  getDocs,
+  runTransaction,
+  increment,
+  deleteField,
+  FieldPath
 } from 'firebase/firestore';
 import type { Subscriber } from '../types';
 import { 
@@ -424,5 +428,59 @@ export const seedDatabase = async () => {
     } catch (e) {
         console.error("Error seeding database:", e);
         throw e;
+    }
+};
+
+
+// --- SEND CLAIM (prevents duplicate emails between the browser app and the GitHub scheduler) ---
+// Atomically moves one subscriber of a campaign from step `idx` to `idx + 1` on the LIVE document.
+// Returns false when the live document no longer has them at `idx` (another sender already did it).
+export const claimCampaignStep = async (campaignId: string, subId: string, idx: number, nowIso: string, totalSteps: number): Promise<boolean> => {
+    if (!db) return false;
+    const ref = doc(db, 'campaigns', campaignId);
+    try {
+        return await runTransaction(db, async (tx: any) => {
+            const snap = await tx.get(ref);
+            if (!snap.exists()) return false;
+            const c: any = snap.data();
+            if (c.status === 'paused') return false;
+            const live = (c.progress && c.progress.currentStepIndex && c.progress.currentStepIndex[subId]) || 0;
+            if (live !== idx) return false;
+            const args: any[] = [
+                new FieldPath('progress', 'currentStepIndex', subId), idx + 1,
+                new FieldPath('progress', 'lastActionAt', subId), nowIso,
+                new FieldPath('stats', 'sent'), increment(1)
+            ];
+            if (idx + 1 >= totalSteps) args.push(new FieldPath('progress', 'completedSubscribers'), increment(1));
+            tx.update(ref, ...(args as [any, any, ...any[]]));
+            return true;
+        });
+    } catch (e) {
+        console.error('claimCampaignStep failed', e);
+        return false;
+    }
+};
+
+// Undo a claim after a failed send (only if nobody moved the subscriber since).
+export const releaseCampaignStep = async (campaignId: string, subId: string, idx: number, prevLastAction: string | null, totalSteps: number) => {
+    if (!db) return;
+    const ref = doc(db, 'campaigns', campaignId);
+    try {
+        await runTransaction(db, async (tx: any) => {
+            const snap = await tx.get(ref);
+            if (!snap.exists()) return;
+            const c: any = snap.data();
+            const live = (c.progress && c.progress.currentStepIndex && c.progress.currentStepIndex[subId]) || 0;
+            if (live !== idx + 1) return;
+            const args: any[] = [
+                new FieldPath('progress', 'currentStepIndex', subId), idx,
+                new FieldPath('progress', 'lastActionAt', subId), prevLastAction === null ? deleteField() : prevLastAction,
+                new FieldPath('stats', 'sent'), increment(-1)
+            ];
+            if (idx + 1 >= totalSteps) args.push(new FieldPath('progress', 'completedSubscribers'), increment(-1));
+            tx.update(ref, ...(args as [any, any, ...any[]]));
+        });
+    } catch (e) {
+        console.error('releaseCampaignStep failed', e);
     }
 };

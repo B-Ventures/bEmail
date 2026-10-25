@@ -1,6 +1,7 @@
 
 import { Campaign, Audience, Sequence, Asset, SmtpConfig } from '../types';
 import { buildUnsubscribeUrl } from './unsubscribe';
+import { claimCampaignStep } from './firebase';
 
 // Helper to resolve content from a sequence step
 export const resolveStepContent = (step: any, assets: Asset[]): string => {
@@ -92,6 +93,16 @@ export const processCampaignSequence = async (
             }
             // ------------------------
 
+            // CLAIM FIRST on the live Firestore document. The in-memory `campaign` can be stale
+            // (e.g. this tab was asleep while the GitHub scheduler already sent this step).
+            const claimIso = new Date().toISOString();
+            const claimed = await claimCampaignStep(campaign.id, sub.id, i, claimIso, sequence.steps.length);
+            recentSendsCache.add(uniqueActionKey);
+            if (!claimed) {
+                logs(`   -> [Skip] ${sub.email} step ${i + 1} already handled by another sender`);
+                break;
+            }
+
             // WE ARE GOING TO SEND
             logs(`[Queue] Sending to ${sub.email}: "${step.subject}"`);
 
@@ -133,6 +144,8 @@ export const processCampaignSequence = async (
                 } catch (err: any) {
                     console.error(err);
                     logs(`   -> Webhook Failed: ${err.message}`);
+                    // Keep the claim: a browser fetch can fail (e.g. CORS) even when the webhook DID send,
+                    // so we never retry from here. At most one copy per step.
                 }
             } else {
                 // Simulation Mode
@@ -140,13 +153,10 @@ export const processCampaignSequence = async (
                 logs(`   -> [Simulated] Email Sent`);
             }
             
-            // Mark as locally sent immediately
-            recentSendsCache.add(uniqueActionKey);
-
             // Update Counters & Timestamps
             sentCount++;
             updatedStepIndex[sub.id] = i + 1; // Move to next step
-            updatedLastActionAt[sub.id] = new Date().toISOString(); // Record NOW as the last action
+            updatedLastActionAt[sub.id] = claimIso; // Record the claim time as the last action
 
             // If we just sent an email, we typically wait for the NEXT delay before sending the next one.
             break; 
@@ -173,22 +183,13 @@ export const processCampaignSequence = async (
 
     if ((campaign.status as string) === 'paused') finalStatus = 'paused';
 
-    // Only update if something changed (optimization)
-    if (sentCount > 0 || campaign.status !== finalStatus || campaign.scheduledFor) {
+    // Progress and stats were already written atomically by claimCampaignStep().
+    // Only push status changes here, and never write the (possibly stale) progress maps back.
+    if (campaign.status !== finalStatus || campaign.scheduledFor) {
         onUpdate({
             ...campaign,
             status: finalStatus,
             scheduledFor: undefined, // Clear schedule as it has run
-            stats: {
-                ...campaign.stats,
-                sent: campaign.stats.sent + sentCount
-            },
-            progress: {
-                totalSubscribers: audience.subscribers.length,
-                completedSubscribers: campaign.progress.completedSubscribers + newCompletedSubscribers,
-                currentStepIndex: updatedStepIndex,
-                lastActionAt: updatedLastActionAt
-            }
         });
     }
 };
