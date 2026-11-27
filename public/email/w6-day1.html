@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>شغلك مليان… وجيبتك فاضية؟</title>
+<!--
+  bVaults email template v2
+  - Email-safe: tables, inline styles, no web fonts, 600px.
+  - Tokens filled weekly by the automation: [[...]]
+  - Tokens filled per subscriber by bEmail: {{firstName}}, {{unsubscribeUrl}}
+  - Blocks are marked BLOCK: … / END BLOCK so they can be repeated or removed per topic.
+  - Assets: https://b-ventures.github.io/bEmail/email/  (logo-cream.png, check-red.png, hero-*.jpg)
+-->
+<style>
+  @media (prefers-color-scheme: dark) {
+    .bv-page { background:#0b0d12 !important; }
+    .bv-card { background:#151922 !important; }
+    .bv-text { color:#e9e5dc !important; }
+    .bv-muted { color:#a7a39a !important; }
+    .bv-soft { background:#1c212c !important; }
+    .bv-tip { background:#2a171a !important; }
+    .bv-line { border-color:#2a303c !important; }
+  }
+  @media only screen and (max-width:620px) {
+    .bv-wrap { width:100% !important; }
+    .bv-pad { padding-left:22px !important; padding-right:22px !important; }
+    .bv-h1 { font-size:30px !important; line-height:42px !important; }
+    .bv-hide-sm { display:none !important; }
+    .bv-stack { display:block !important; width:100% !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#EEECE7;" class="bv-page">
+<!-- Preheader (inbox preview text) -->
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">٣ علامات إنك مش جاهز ترفع سعرك، وقائمة مهام مجانية تصلّحها.&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#EEECE7;" class="bv-page">
+<tr><td align="center" style="padding:28px 12px;">
+
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" class="bv-wrap" style="width:600px;max-width:600px;">
+
+  <!-- BLOCK: HEADER (dark, red notch, logo, vault label) -->
+  <tr><td style="background:#0E1118;border-radius:14px 14px 0 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td width="48%" class="bv-hide-sm"></td>
+        <td width="4%" align="center" valign="top" style="font-size:0;line-height:0;"><div style="width:10px;height:44px;background:#DA2B35;border-radius:0 0 6px 6px;margin:0 auto;"></div></td>
+        <td width="48%" class="bv-hide-sm"></td>
+      </tr>
+    </table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td class="bv-pad" style="padding:18px 40px 22px 40px;" align="right" valign="middle">
+          <img src="https://b-ventures.github.io/bEmail/email/logo-cream.png" width="82" alt="bVaults" style="display:block;border:0;width:82px;height:auto;">
+        </td>
+        <td class="bv-pad" style="padding:18px 40px 22px 40px;font-family:Tahoma,Arial,sans-serif;font-size:12px;letter-spacing:2px;color:#A7A39A;" align="left" valign="middle" dir="ltr">
+          VAULT <span style="color:#DA2B35;font-weight:bold;">#06</span>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+
+  <!-- BLOCK: HERO IMAGE (fades into the dark band below) -->
+  <tr><td style="background:#0E1118;font-size:0;line-height:0;">
+    <img src="https://b-ventures.github.io/bEmail/email/hero-high-ticket-offer.jpg" width="600" alt="كتاب Package What You Know Into a High-Ticket Offer على طاولة خشب" style="display:block;width:100%;max-width:600px;height:auto;border:0;">
+  </td></tr>
+
+  <!-- BLOCK: TITLE BAND -->
+  <tr><td class="bv-pad" style="background:#0E1118;padding:4px 40px 36px 40px;font-family:Tahoma,Arial,sans-serif;text-align:right;" dir="rtl">
+    <div style="font-size:13px;font-weight:bold;color:#DA2B35;letter-spacing:.5px;margin:0 0 10px 0;">موضوع الأسبوع · يوم ١ من ٧</div>
+    <div class="bv-h1" style="font-size:34px;line-height:48px;font-weight:bold;color:#F3EFE6;margin:0 0 10px 0;">حوّل اللي بتعرفه لعرض غالي</div>
+    <div style="font-size:16px;line-height:28px;color:#A7A39A;">من بيع الساعات لبيع النتيجة، خطوة بخطوة خلال ٧ أيام.</div>
+  </td></tr>
+
+  <!-- BLOCK: BODY CARD -->
+  <tr><td class="bv-card" style="background:#FFFFFF;border-radius:0 0 14px 14px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+      <!-- greeting + intro -->
+      <tr><td class="bv-pad bv-text" style="padding:36px 40px 4px 40px;font-family:Tahoma,Arial,sans-serif;font-size:17px;line-height:31px;color:#1B1F27;text-align:right;" dir="rtl">
+        <p style="margin:0 0 18px 0;font-weight:bold;">أهلاً {{firstName}} 👋</p>
+        <p style="margin:0 0 18px 0;">إذا شغلك مليان وما عندك وقت تتنفس، بس آخر الشهر الحساب ما بيطلع مزبوط، فالمشكلة مش بمهارتك. المشكلة بالطريقة اللي بتبيع فيها هالمهارة. هالأسبوع رح نشتغل على شي واحد: كيف تحوّل خبرتك لعرض واضح بسعر محترم.</p>
+      </td></tr>
+
+      <!-- BLOCK: LESSON (repeatable: heading + paragraph) -->
+      <tr><td class="bv-pad bv-text" style="padding:8px 40px 4px 40px;font-family:Tahoma,Arial,sans-serif;text-align:right;color:#1B1F27;" dir="rtl">
+        <div style="font-size:22px;line-height:34px;font-weight:bold;margin:0 0 8px 0;"><span style="color:#DA2B35;">—</span> ٣ أخطاء بتقتل عرضك الغالي قبل ما يبدأ</div>
+        <p style="margin:0 0 18px 0;font-size:17px;line-height:31px;">الأول: ما بتقدر تقول شو النتيجة بالضبط وكيف بتنقاس. «رح تحس بثقة أكبر» ما بتبرر ١٥ ألف دولار. الثاني: لسا بتسعّر بالساعة، فكل ما صرت أسرع، صرت تقبض أقل. الثالث: زبائنك محتاجينك بكل قرار، فكل زبون جديد بياكل من وقتك بدل ما يزيد دخلك. <span style="background:#FBE4E5;padding:1px 6px;border-radius:4px;font-weight:bold;">الزبون ما بيدفع على تعبك، بيدفع على النتيجة.</span></p>
+      </td></tr>
+      <!-- END BLOCK -->
+
+      <!-- BLOCK: PRO TIP -->
+      <tr><td class="bv-pad" style="padding:6px 40px 10px 40px;" dir="rtl">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr><td class="bv-tip" style="background:#FDF1F1;border-right:4px solid #DA2B35;border-radius:10px 0 0 10px;padding:18px 20px;font-family:Tahoma,Arial,sans-serif;font-size:16px;line-height:29px;color:#1B1F27;text-align:right;" dir="rtl">
+            <span style="color:#DA2B35;font-weight:bold;">نصيحة سريعة:</span> <span class="bv-text">قبل ما ترفع سعرك، اكتب النتيجة اللي بتوعد فيها برقم أو بمدة. إذا ما قدرت تكتبها بسطر واحد، هون بتبدأ.</span>
+          </td></tr>
+        </table>
+      </td></tr>
+      <!-- END BLOCK -->
+
+      <!-- BLOCK: RED CHECKLIST (repeat the row per item) -->
+      <tr><td class="bv-pad" style="padding:14px 40px 6px 40px;" dir="rtl">
+        <div class="bv-text" style="font-family:Tahoma,Arial,sans-serif;font-size:18px;font-weight:bold;color:#1B1F27;margin:0 0 12px 0;text-align:right;">شو رح نغطي بالكورس هالأسبوع:</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" dir="rtl">
+          <tr>
+            <td width="34" valign="top" style="padding:3px 0 12px 10px;"><img src="https://b-ventures.github.io/bEmail/email/check-red.png" width="22" height="22" alt="✓" style="display:block;border:0;"></td>
+            <td valign="top" class="bv-text" style="padding:0 0 12px 0;font-family:Tahoma,Arial,sans-serif;font-size:16px;line-height:28px;color:#1B1F27;text-align:right;"><b>الأيام ٢–٣:</b> فخ الساعة، ولعنة الخبير، وكيف تبيع نتيجة بدل وقت.</td>
+          </tr>
+          <tr>
+            <td width="34" valign="top" style="padding:3px 0 12px 10px;"><img src="https://b-ventures.github.io/bEmail/email/check-red.png" width="22" height="22" alt="✓" style="display:block;border:0;"></td>
+            <td valign="top" class="bv-text" style="padding:0 0 12px 0;font-family:Tahoma,Arial,sans-serif;font-size:16px;line-height:28px;color:#1B1F27;text-align:right;"><b>الأيام ٤–٥:</b> المشكلة «النازفة» اللي الزبون بيدفع ليخلص منها، وتحويل خدمتك لنظام إله اسم.</td>
+          </tr>
+          <tr>
+            <td width="34" valign="top" style="padding:3px 0 12px 10px;"><img src="https://b-ventures.github.io/bEmail/email/check-red.png" width="22" height="22" alt="✓" style="display:block;border:0;"></td>
+            <td valign="top" class="bv-text" style="padding:0 0 12px 0;font-family:Tahoma,Arial,sans-serif;font-size:16px;line-height:28px;color:#1B1F27;text-align:right;"><b>الأيام ٦–٧:</b> كيف تخدم زبائن أكثر بساعات أقل، وتسعّر بالحسبة مش بالإحساس، وتبيع بدون «بيتش».</td>
+          </tr>
+        </table>
+      </td></tr>
+      <!-- END BLOCK -->
+
+      <!-- BLOCK: ACTION STEP -->
+      <tr><td class="bv-pad" style="padding:14px 40px 10px 40px;" dir="rtl">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr><td class="bv-soft" style="background:#F6F4EF;border-radius:12px;padding:24px 24px 26px 24px;font-family:Tahoma,Arial,sans-serif;text-align:right;" dir="rtl">
+            <div style="font-size:12px;font-weight:bold;letter-spacing:1px;color:#DA2B35;margin:0 0 6px 0;">خطوتك اليوم · ١٠ دقايق</div>
+            <div class="bv-text" style="font-size:19px;line-height:30px;font-weight:bold;color:#1B1F27;margin:0 0 8px 0;">نزّل قائمة المهام المجانية</div>
+            <div class="bv-muted" style="font-size:16px;line-height:28px;color:#4A4F5A;margin:0 0 18px 0;">«The Scalable Service Delivery Setup»: ١٩ خطوة بـ٥ مراحل لتخدم زبائن أكثر بدون ما تزيد ساعات شغلك. علّم على اللي عندك، وخلّي الباقي لهالأسبوع.</div>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="background:#DA2B35;border-radius:8px;">
+                <a href="https://vaults.bosstsc.com/l/high-ticket-offer-checklist" style="display:inline-block;padding:13px 26px;font-family:Tahoma,Arial,sans-serif;font-size:16px;font-weight:bold;color:#FFFFFF;text-decoration:none;">نزّل قائمة المهام مجاناً ←</a>
+              </td>
+            </tr></table>
+          </td></tr>
+        </table>
+      </td></tr>
+      <!-- END BLOCK -->
+
+      <!-- BLOCK: PRODUCT CARD (image from the Gumroad product cover) -->
+      <tr><td class="bv-pad" style="padding:18px 40px 10px 40px;" dir="rtl">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="bv-line" style="border:1px solid #ECE9E2;border-radius:12px;">
+          <tr>
+            <td class="bv-stack" width="42%" valign="middle" style="padding:16px;font-size:0;line-height:0;">
+              <img src="https://public-files.gumroad.com/plk16wpqb0s5tv12blssdayjkhn7" width="200" alt="Package What You Know Into a High-Ticket Offer" style="display:block;width:100%;max-width:200px;height:auto;border:0;border-radius:8px;">
+            </td>
+            <td class="bv-stack" valign="middle" style="padding:16px 4px 16px 18px;font-family:Tahoma,Arial,sans-serif;text-align:right;" dir="rtl">
+              <div style="font-size:12px;font-weight:bold;letter-spacing:1px;color:#DA2B35;margin:0 0 6px 0;">كتاب الأسبوع · $14.90</div>
+              <div class="bv-text" style="font-size:18px;line-height:26px;font-weight:bold;color:#1B1F27;margin:0 0 6px 0;" dir="ltr" align="right">Package What You Know Into a High-Ticket Offer</div>
+              <div class="bv-muted" style="font-size:14px;line-height:24px;color:#5C616B;margin:0 0 12px 0;">٨٥ صفحة: من فخ الساعة لاختيار المشكلة، تسمية نظامك، التسعير بالقيمة، وجملة العرض اللي بتبيع لحالها.</div>
+              <a href="https://vaults.bosstsc.com/l/high-ticket-offer" style="font-size:15px;font-weight:bold;color:#DA2B35;text-decoration:none;">شوف الكتاب ←</a>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+      <!-- END BLOCK -->
+
+      <!-- BLOCK: TOMORROW + QUESTION -->
+      <tr><td class="bv-pad bv-text" style="padding:18px 40px 4px 40px;font-family:Tahoma,Arial,sans-serif;font-size:17px;line-height:31px;color:#1B1F27;text-align:right;" dir="rtl">
+        <p style="margin:0 0 16px 0;"><b style="color:#DA2B35;">بكرا:</b> حسبة صغيرة بتوجع، بس بتورجيك أد إيش بتقبض فعلياً على الساعة.</p>
+        <p style="margin:0 0 6px 0;">سؤال سريع: شو أكثر خدمة بتبيعها اليوم؟ رد علي بكلمة وحدة.</p>
+      </td></tr>
+
+      <!-- BLOCK: SIGNATURE -->
+      <tr><td class="bv-pad" style="padding:20px 40px 6px 40px;font-family:Tahoma,Arial,sans-serif;text-align:right;" dir="rtl">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="right" dir="rtl"><tr>
+          <td valign="middle" style="padding:0 0 0 12px;"><div style="width:4px;height:52px;background:#DA2B35;border-radius:2px;"></div></td>
+          <td valign="middle">
+            <div class="bv-text" style="font-size:18px;font-weight:bold;color:#1B1F27;">هشام</div>
+            <div class="bv-muted" style="font-size:14px;color:#5C616B;">مؤسس <span dir="ltr">bVaults</span></div>
+            <div class="bv-muted" style="font-size:13px;color:#8A8E96;font-style:italic;">أدوات وكتب عملية لرواد الأعمال العرب</div>
+          </td>
+        </tr></table>
+      </td></tr>
+
+      <!-- BLOCK: P.S. -->
+      <tr><td class="bv-pad" style="padding:18px 40px 32px 40px;" dir="rtl">
+        <div class="bv-line" style="border-top:1px solid #ECE9E2;padding-top:16px;font-family:Tahoma,Arial,sans-serif;font-size:15px;line-height:27px;color:#4A4F5A;text-align:right;" dir="rtl">
+          <b style="color:#DA2B35;">ملاحظة:</b> <span class="bv-muted">الكورس ببلّش من بكرا، كل يوم إيميل قصير مع خطوة وحدة بتعملها بأقل من نص ساعة.</span>
+        </div>
+      </td></tr>
+
+    </table>
+  </td></tr>
+  <!-- END BODY CARD -->
+
+  <!-- BLOCK: FOOTER -->
+  <tr><td align="center" style="padding:24px 20px 8px 20px;font-family:Tahoma,Arial,sans-serif;font-size:13px;line-height:22px;color:#8A8E96;text-align:center;" class="bv-muted">
+    <a href="https://www.instagram.com/the.bvaults/" style="color:#DA2B35;text-decoration:none;font-weight:bold;">Instagram</a>
+    &nbsp;·&nbsp;
+    <a href="https://vaults.bosstsc.com/" style="color:#DA2B35;text-decoration:none;font-weight:bold;">المتجر</a>
+    <br>
+    <span dir="ltr">© bVaults · B Ventures LLC · 5830 E 2nd St, Casper, WY, USA</span>
+    <br>
+    وصلك هالإيميل لأنك سجّلت بقائمة <span dir="ltr">bVaults</span>. <a href="{{unsubscribeUrl}}" style="color:#8A8E96;text-decoration:underline;">إلغاء الاشتراك</a>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>
